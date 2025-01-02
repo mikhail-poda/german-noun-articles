@@ -1,7 +1,7 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
+import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -69,22 +69,42 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
   }
 
   Future<void> loadWords() async {
+    // Load initial data from assets
+    final String data = await rootBundle.loadString('assets/nouns.txt');
+    final List<String> lines = data.split('\n');
+    final List<Word> assetWords = lines
+        .where((line) => line.trim().isNotEmpty)
+        .map((line) {
+      final parts = line.split('\t');
+      return Word(noun: parts[0].trim(), article: parts[1].trim().toLowerCase());
+    }).toList();
+
     // Try to load saved state from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final savedWords = prefs.getString('words');
 
-    if (savedWords != null) {
-      final List<dynamic> decoded = json.decode(savedWords);
-      words = decoded.map((w) => Word.fromJson(w)).toList();
+    // If no saved words exist, use all words from assets
+    if (savedWords == null) {
+      words = assetWords;
+      words.shuffle();
     } else {
-      // Load initial data from assets
-      final String data = await rootBundle.loadString('assets/nouns.txt');
-      final List<String> lines = data.split('\n');
-      words = lines.where((line) => line.trim().isNotEmpty).map((line) {
-        final parts = line.split('\t');
-        return Word(
-            noun: parts[0].trim(), article: parts[1].trim().toLowerCase());
-      }).toList();
+      final List<dynamic> decoded = json.decode(savedWords);
+      final List<Word> existingWords =
+          decoded.map((w) => Word.fromJson(w)).toList();
+
+      // Create a map of existing words for quick lookup
+      final Map<String, Word> existingWordsMap = {
+        for (var word in existingWords) word.noun: word
+      };
+
+      // Add new words from assets that don't exist in saved words
+      for (var assetWord in assetWords) {
+        if (!existingWordsMap.containsKey(assetWord.noun)) {
+          existingWords.add(assetWord);
+        }
+      }
+
+      words = existingWords;
     }
 
     selectNextWord();
@@ -93,13 +113,9 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
   void selectNextWord() {
     if (words.isEmpty) return;
 
-    // Sort words by rank and select the first one
-    words.shuffle();
-    words.sort((a, b) => a.rank.compareTo(b.rank));
-
     setState(() {
-      currentWord = words[0];
       showResult = false;
+      currentWord = words[0];
       selectedArticle = null;
     });
   }
@@ -112,18 +128,28 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
 
   void handleArticleSelection(String article) {
     if (showResult || currentWord == null) return;
-
-    final isCorrect =
-        article.toLowerCase() == currentWord!.article.toLowerCase();
+    final isCorrect = article == currentWord!.article;
 
     setState(() {
-      selectedArticle = article;
       showResult = true;
+      selectedArticle = article;
 
-      // Update word rank
-      final wordIndex = words.indexWhere((w) => w.noun == currentWord!.noun);
-      if (wordIndex != -1) {
-        words[wordIndex].rank += isCorrect ? 1 : -1;
+      if (isCorrect) {
+        if (currentWord!.rank == 0) {
+          currentWord!.rank = 6;
+        } else {
+          currentWord!.rank += 1;
+        }
+      } else {
+        currentWord!.rank = 1;
+      }
+
+      words.removeAt(0);
+      var index = 3 * pow(2, (currentWord!.rank - 1)).toInt();
+      if (index < words.length) {
+        words.insert(index, currentWord!);
+      } else {
+        words.add(currentWord!);
       }
     });
 
@@ -159,16 +185,42 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
+              Text('${words.length} • ${words.where((x) => x.rank > 0).length} • ${words.where((x) => x.rank > 8).length}',
+                  style: Theme.of(context).textTheme.bodyLarge),
               Expanded(
                 child: Center(
                   child: Card(
-                    child: Padding(
+                    elevation: 4,
+                    child: Container(
                       padding: const EdgeInsets.all(24.0),
-                      child: Text(
-                        showResult
-                            ? '${currentWord!.article} ${currentWord!.noun}'
-                            : currentWord?.noun ?? 'Loading...',
-                        style: Theme.of(context).textTheme.headlineMedium,
+                      child: IntrinsicWidth(
+                        // This makes the card wrap around content
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          // This keeps the Row compact
+                          children: [
+                            if (showResult)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 16.0),
+                                child: Icon(
+                                  currentWord!.rank == 1
+                                      ? Icons.close
+                                      : Icons.check,
+                                  color: currentWord!.rank == 1
+                                      ? Colors.red
+                                      : Colors.green,
+                                  size: 30,
+                                ),
+                              ),
+                            Text(
+                              showResult
+                                  ? '${currentWord!.article} ${currentWord!.noun}'
+                                  : currentWord?.noun ?? 'Loading...',
+                              style: Theme.of(context).textTheme.headlineMedium,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -183,7 +235,7 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 4.0),
                         child: ElevatedButton(
                           onPressed: showResult
-                              ? () {} // Empty function instead of null
+                              ? () {}
                               : () => handleArticleSelection(article),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: getButtonColor(article),
@@ -203,7 +255,7 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
                   }).toList(),
                 ),
               ),
-              Text('Version 0.1 • Current word rank: ${currentWord?.rank ?? 0}'),
+              Text('Version 0.5 • Current word rank: ${currentWord?.rank ?? 0}'),
             ],
           ),
         ),
