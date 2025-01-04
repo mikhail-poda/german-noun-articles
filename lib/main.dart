@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'web_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:html' if (dart.library.html) 'dart:html' as html;
 
 void main() {
   runApp(const MyApp());
@@ -226,11 +226,11 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> with Widg
                     Text(' ${words.length}', style: Theme.of(context).textTheme.bodyLarge),
                   ]),
                   Row(children: [
-                    Icon(Icons.check, size: 30, color: Colors.green),
+                    Icon(LucideIcons.check, size: 30, color: Colors.green),
                     Text(' ${used.length}', style: Theme.of(context).textTheme.bodyLarge),
                   ]),
                   Row(children: [
-                    Text('＋', style: TextStyle(color: Colors.teal, fontSize: 20, fontWeight: FontWeight.bold)),
+                    Icon(LucideIcons.checkCheck, size: 30, color: Colors.teal),
                     Text(' ${learned.length}', style: Theme.of(context).textTheme.bodyLarge),
                   ]),
                   Row(children: [
@@ -307,7 +307,7 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> with Widg
                   }).toList(),
                 ),
               ),
-              Text('Version 0.6 • Current word rank: ${currentWord?.rank ?? 0}'),
+              Text('Version 0.7 • Current word rank: ${currentWord?.rank ?? 0}'),
             ],
           ),
         ),
