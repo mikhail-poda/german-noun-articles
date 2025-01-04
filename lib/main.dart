@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'web_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:html' if (dart.library.html) 'dart:html' as html;
 
 void main() {
   runApp(const MyApp());
@@ -55,17 +57,54 @@ class ArticleLearningScreen extends StatefulWidget {
   State<ArticleLearningScreen> createState() => _ArticleLearningScreenState();
 }
 
-class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
+class _ArticleLearningScreenState extends State<ArticleLearningScreen> with WidgetsBindingObserver {
   List<Word> words = [];
   Word? currentWord;
   String? selectedArticle;
   bool showResult = false;
   final articles = ['der', 'die', 'das'];
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WebUtils.getInstance().initializeLifecycleListeners(saveProgress);
     loadWords();
+  }
+
+  Future<void> saveProgress() async {
+    if (_isSaving) {
+      return;
+    }
+
+    _isSaving = true;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = json.encode(words.map((w) => w.toJson()).toList());
+      await prefs.setString('words', encoded);
+    } finally {
+      _isSaving = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (!_isSaving) {
+      saveProgress();
+    }
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      saveProgress();
+    }
   }
 
   Future<void> loadWords() async {
@@ -77,20 +116,19 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
         .map((line) {
       final parts = line.split('\t');
       return Word(noun: parts[0].trim(), article: parts[1].trim().toLowerCase());
-    }).toList();
+    })
+        .toList();
 
     // Try to load saved state from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final savedWords = prefs.getString('words');
 
-    // If no saved words exist, use all words from assets
     if (savedWords == null) {
       words = assetWords;
       words.shuffle();
     } else {
       final List<dynamic> decoded = json.decode(savedWords);
-      final List<Word> existingWords =
-          decoded.map((w) => Word.fromJson(w)).toList();
+      final List<Word> existingWords = decoded.map((w) => Word.fromJson(w)).toList();
 
       // Create a map of existing words for quick lookup
       final Map<String, Word> existingWordsMap = {
@@ -120,12 +158,6 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
     });
   }
 
-  Future<void> saveProgress() async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = json.encode(words.map((w) => w.toJson()).toList());
-    await prefs.setString('words', encoded);
-  }
-
   void handleArticleSelection(String article) {
     if (showResult || currentWord == null) return;
     final isCorrect = article == currentWord!.article;
@@ -153,9 +185,6 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
       }
     });
 
-    saveProgress();
-
-    // Move to next word after delay
     Future.delayed(const Duration(seconds: 2), () {
       selectNextWord();
     });
@@ -179,14 +208,37 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
 
   @override
   Widget build(BuildContext context) {
+    var used = words.where((x) => x.rank > 0).toList();
+    var learned = used.where((x) => x.rank > 8).toList();
+    var points = used.fold(0, (sum, word) => sum + word.rank);
+
     return Scaffold(
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              Text('${words.length} • ${words.where((x) => x.rank > 0).length} • ${words.where((x) => x.rank > 8).length}',
-                  style: Theme.of(context).textTheme.bodyLarge),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Row(children: [
+                    Icon(Icons.list, size: 30, color: Colors.black45),
+                    Text(' ${words.length}', style: Theme.of(context).textTheme.bodyLarge),
+                  ]),
+                  Row(children: [
+                    Icon(Icons.check, size: 30, color: Colors.green),
+                    Text(' ${used.length}', style: Theme.of(context).textTheme.bodyLarge),
+                  ]),
+                  Row(children: [
+                    Text('＋', style: TextStyle(color: Colors.teal, fontSize: 20, fontWeight: FontWeight.bold)),
+                    Text(' ${learned.length}', style: Theme.of(context).textTheme.bodyLarge),
+                  ]),
+                  Row(children: [
+                    Icon(Icons.emoji_events, size: 25, color: Colors.amber),
+                    Text(' $points', style: Theme.of(context).textTheme.bodyLarge),
+                  ]),
+                ],
+              ),
               Expanded(
                 child: Center(
                   child: Card(
@@ -255,7 +307,7 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> {
                   }).toList(),
                 ),
               ),
-              Text('Version 0.5 • Current word rank: ${currentWord?.rank ?? 0}'),
+              Text('Version 0.6 • Current word rank: ${currentWord?.rank ?? 0}'),
             ],
           ),
         ),
