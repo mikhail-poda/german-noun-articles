@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'web_utils.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:darq/darq.dart';
 
 void main() {
   runApp(const MyApp());
@@ -210,7 +211,7 @@ class _ArticleLearningScreenState extends State<ArticleLearningScreen> with Widg
   Widget build(BuildContext context) {
     var used = words.where((x) => x.rank > 0).toList();
     var learned = used.where((x) => x.rank > 8).toList();
-    var points = used.fold(0, (sum, word) => sum + word.rank);
+    var points = used.sum((word) => word.rank);
 
     return Scaffold(
       body: SafeArea(
