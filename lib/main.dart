@@ -84,7 +84,7 @@ class _ArticleLearningScreenState extends BaseLearningScreenState<Word, ArticleL
   String get version => '0.8.0';
 
   @override
-  String get prefsKey => 'words';
+  String get prefsKey => 'german_articles';
 
   @override
   void loadSavedState(String savedStateJson) {
